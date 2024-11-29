@@ -1,16 +1,22 @@
-# PCMux - WebSocket-Based Real-Time Audio Streaming Protocol
+# PCMux - JSON-Based Real-Time Audio Streaming Protocol
 
 ## Overview
 
-This protocol defines a minimal structure for real-time audio streaming over WebSocket connections using JSON messages containing base64-encoded PCM audio data. It facilitates the transmission of audio data from a server to a client in real-time, suitable for applications like live audio feeds, voice assistants, and streaming services.
+This protocol defines a minimal structure for real-time audio streaming over WebSocket connections and STDIO using JSON messages containing base64-encoded PCM audio data. It facilitates the transmission of audio data between apps in real-time, suitable for applications like live audio feeds, voice assistants, and streaming services.
 
 It is entirely derivative of and based on the [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime). This is just a minimal subset to support custom audio streaming applications that want to maximize compatibility with the Realtime API.
 
 ## WebSocket Connection
 
-All messages are sent over a standard WebSocket connection.  This specification only defines one event type to carry audio over that socket, other event types can be used for application specific needs.
+Messages can be sent over a standard WebSocket connection.  This specification only defines one event type to carry audio over that socket, other event types can be used for application specific needs.
+
+## STDIO Pipes
+
+Messages can be piped between command line applications via STDIN and STDOUT. The JSON messages must not be formatted since each message is terminated by a newline, sometimes referred to as newline-delimited JSON (nd-json) or JSON Lines.
 
 ## Audio Encoding Specifications
+
+There is only one fixed format for all audio encoding:
 
 - **Format**: PCM (Pulse-Code Modulation)
 - **Sample Format**: 16-bit signed integers (`paInt16`)
