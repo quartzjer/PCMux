@@ -1,0 +1,6 @@
+pyaudio
+av
+aiohttp
+aiortc
+python-dotenv
+numpy
