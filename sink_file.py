@@ -38,23 +38,32 @@ def main():
         frame = av.AudioFrame(format='s16', layout='mono', samples=512)
         frame.rate = 24000
         
+        sample_buffer = np.array([], dtype=np.int16)
+        
         for line in sys.stdin:
             try:
                 message = json.loads(line)
                 if message['type'] == 'pcmux.audio.delta':
-                    audio_array = np.frombuffer(base64.b64decode(message['delta']), dtype=np.int16)
+                    new_samples = np.frombuffer(base64.b64decode(message['delta']), dtype=np.int16)
+                    sample_buffer = np.append(sample_buffer, new_samples)
                     
-                    if len(audio_array) < 512:
-                        audio_array = np.pad(audio_array, (0, 512 - len(audio_array)))
-                    
-                    frame.planes[0].update(audio_array.tobytes())
-                    
-                    for packet in stream.encode(frame):
-                        container.mux(packet)
+                    while len(sample_buffer) >= 512:
+                        frame_samples = sample_buffer[:512]
+                        sample_buffer = sample_buffer[512:]
+                        
+                        frame.planes[0].update(frame_samples.tobytes())
+                        for packet in stream.encode(frame):
+                            container.mux(packet)
                 
             except (json.JSONDecodeError, Exception) as e:
                 print(f"Error: {e}", file=sys.stderr)
                 continue
+        
+        if len(sample_buffer) > 0:
+            frame_samples = np.pad(sample_buffer, (0, 512 - len(sample_buffer)))
+            frame.planes[0].update(frame_samples.tobytes())
+            for packet in stream.encode(frame):
+                container.mux(packet)
         
         for packet in stream.encode(None):
             container.mux(packet)
