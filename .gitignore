@@ -1,7 +1,8 @@
-# Audio testing files
+# Ignore testing files
 *.wav
 *.mp3
 *.mp4
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

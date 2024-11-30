@@ -4,3 +4,5 @@ aiohttp
 aiortc
 python-dotenv
 numpy
+opencv-python
+pillow

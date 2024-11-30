@@ -9,9 +9,12 @@ import sys
 
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
+from aiortc.sdp import candidate_from_sdp
+from aiortc.mediastreams import MediaStreamError
 
 SERVER_PORT = 8080
 WHIP_ENDPOINT = "/whip"
+SCREEN_MAX = 1024
 
 # Add global connection tracking
 pcs = set()
@@ -58,22 +61,41 @@ class WHIPHandler:
                     }
                     print(json.dumps(message), flush=True)
 
+            except MediaStreamError:
+                log(f"Audio stream ended for handler {self.id}")
+                self.connection_closed.set()
+                break
             except Exception as e:
-                log(f"Error receiving audio frame: {e}")
+                log(f"Error receiving audio frame for handler {self.id}: {e}")
                 self.connection_closed.set()
                 break
 
     async def handle_video_track(self, track: MediaStreamTrack):
         log(f"Handling video track: {track.kind}")
         
+        counter = 0
         while not self.connection_closed.is_set():
             try:
                 frame = await track.recv()
-                self.video_frame_count += 1
-                if self.video_frame_count % 30 == 0:
-                    log(f"Received {self.video_frame_count} video frames")
+                counter += 1
+                if counter % 30 == 0:
+                    log(f"Received {counter} video frames")
+                    img = frame.to_image()
+                    # resize image if necessary, preserve aspect ratio
+                    if img.width > SCREEN_MAX or img.height > SCREEN_MAX:
+                        img.thumbnail((SCREEN_MAX, SCREEN_MAX), resample=3)
+                    img.save(f'snapshot.png')
+                    
+            except MediaStreamError:
+                log(f"Video stream ended for handler {self.id}")
+                self.connection_closed.set()
+                break
+            except av.AVError as e:
+                log(f"Error receiving video frame for handler {self.id}: {e}")
+                self.connection_closed.set()
+                break
             except Exception as e:
-                log(f"Error receiving video frame: {e}")
+                log(f"Unexpected error in video handler {self.id}: {e}")
                 self.connection_closed.set()
                 break
 
@@ -177,6 +199,49 @@ async def handle_whip(request):
             await handler.close()
         return web.Response(status=500, text=str(e))
 
+async def handle_patch(request):
+    session_id = request.match_info['id']
+    pc = pcs_by_resource_id.get(session_id)
+    if not pc:
+        return web.Response(status=404, text='Not Found')
+
+    if request.content_type != 'application/trickle-ice-sdpfrag':
+        return web.Response(status=415, text='Unsupported Media Type')
+
+    candidate_sdpfrag = await request.text()
+    lines = candidate_sdpfrag.strip().splitlines()
+    for line in lines:
+        if line.startswith('a=candidate:'):
+            sdp_line = line[2:]
+            candidate = candidate_from_sdp(sdp_line)
+            await pc.addIceCandidate(candidate)
+        elif line.startswith('a=end-of-candidates'):
+            await pc.addIceCandidate(None)
+
+    return web.Response(status=204)
+
+async def handle_delete(request):
+    session_id = request.match_info['id']
+    handler = handlers_by_resource_id.pop(session_id, None)
+    if not handler:
+        return web.Response(status=404, text='Not Found')
+
+    await handler.close()
+    return web.Response(status=204)
+
+async def save_frames(track):
+    counter = 0
+    while True:
+        try:
+            frame = await track.recv()
+            counter += 1
+            if counter % 30 == 0:
+                img = frame.to_image()
+                img.save(f'snapshot_{counter}.png')
+        except av.AVError as e:
+            log(f"Error receiving frame: {e}")
+            break
+
 async def on_shutdown(app):
     coros = [handler.close() for handler in handlers_by_resource_id.values()]
     await asyncio.gather(*coros)
@@ -187,6 +252,8 @@ async def on_shutdown(app):
 def main():
     app = web.Application()
     app.router.add_post(WHIP_ENDPOINT, handle_whip)
+    app.router.add_patch(f"{WHIP_ENDPOINT}/{{id}}", handle_patch)
+    app.router.add_delete(f"{WHIP_ENDPOINT}/{{id}}", handle_delete)
     app.on_shutdown.append(on_shutdown)
     
     log(f"Starting WHIP server at http://127.0.0.1:{SERVER_PORT}{WHIP_ENDPOINT}")
