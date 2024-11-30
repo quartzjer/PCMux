@@ -22,7 +22,7 @@ There is only one fixed format for all audio encoding:
 - **Sample Format**: 16-bit signed integers (`paInt16`)
 - **Channels**: Mono (1 channel)
 - **Sampling Rate**: 24,000 Hz
-- **Chunk Size**: 1,024 frames per buffer
+- **Chunk Size**: Variable
 
 PCM audio data is base64-encoded before being embedded in JSON messages.
 
