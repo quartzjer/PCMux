@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>OpenAI Chat</title>
+    <style>
+        /* Inline CSS for styling */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        #chatbox {
+            width: 60%;
+            margin: 20px auto;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 70vh;
+            overflow-y: scroll;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .whisper {
+            background-color: #e0f7fa;
+            text-align: left;
+        }
+        .gpt4o {
+            background-color: #e8eaf6;
+            text-align: left;
+        }
+        .system {
+            background-color: #f0f0f0;
+            text-align: center;
+            color: #777;
+        }
+        .user {
+            background-color: #d1e7dd;
+            text-align: right;
+        }
+        #status {
+            width: 60%;
+            margin: 0 auto;
+            padding: 10px;
+            text-align: center;
+            color: #555;
+        }
+        #input-container {
+            width: 60%;
+            margin: 20px auto;
+            display: flex;
+            gap: 10px;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #send-button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="chatbox"></div>
+    <div id="input-container">
+        <input type="text" id="message-input" placeholder="Type a message...">
+        <button id="send-button">Send</button>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+        const chatbox = document.getElementById('chatbox');
+        const status = document.getElementById('status');
+        let lastCommitTime = Date.now();
+        const COMMIT_INTERVAL = 5000;
+
+        // Autofocus the message input on page load
+        document.getElementById('message-input').focus();
+
+        // Helper function to log messages with timestamp
+        function logWithTimestamp(message) {
+            const timestamp = new Date().toISOString();
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        // Helper function to append messages to the chatbox
+        function appendMessage(content, type) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', type);
+            messageElement.textContent = content;
+            chatbox.appendChild(messageElement);
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
+
+        ws.onopen = function() {
+            logWithTimestamp("WebSocket connection established");
+            appendMessage("Connected to the server", "system");
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const eventType = data.type;
+
+            if (eventType === 'response.done') {
+                const output = data.response.output;
+                if (output && output.length > 0) {
+                    const content = output[0].content;
+                    if (content && content.length > 0) {
+                        const responseText = content[0].text;
+                        logWithTimestamp(`GPT response: ${responseText.substring(0, 50)}...`);
+                        appendMessage(responseText, 'gpt4o');
+                    }
+                }
+            } else if (eventType === 'conversation.item.input_audio_transcription.completed') {
+                const transcript = data.transcript;
+                logWithTimestamp(`Whisper transcript: ${transcript.substring(0, 50)}...`);
+                appendMessage(transcript, 'whisper');
+            } else if (eventType === 'error') {
+                console.error(`[${new Date().toISOString()}] Error: ${data.error.message}`);
+                appendMessage(`Error: ${data.error.message}`, 'system');
+            } else if (eventType === "input_audio_buffer.appended") {
+                const currentTime = Date.now();
+                if (currentTime - lastCommitTime >= COMMIT_INTERVAL) {
+                    logWithTimestamp(`Committing audio buffer`);
+                    ws.send(JSON.stringify({
+                        type: "input_audio_buffer.commit"
+                    }));
+                    lastCommitTime = currentTime;
+                }
+            } else if (eventType.startsWith("input_audio_buffer.") ||
+                eventType.startsWith("conversation.") ||
+                eventType.startsWith("response.") ||
+                eventType === "session.updated" ||
+                eventType === "rate_limits.updated") {
+                // Ignore these events
+            } else {
+                logWithTimestamp(`Unhandled event type: ${eventType}`);
+            }
+        };
+
+        ws.onclose = function() {
+            logWithTimestamp("WebSocket connection closed");
+            appendMessage("Disconnected from the server", "system");
+        };
+
+        ws.onerror = function(error) {
+            logWithTimestamp("WebSocket error occurred");
+            appendMessage("An error occurred", "system");
+            console.error("WebSocket error:", error);
+        };
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (text) {
+                logWithTimestamp(`Sending message: ${text}`);
+                ws.send(JSON.stringify({
+                    type: "response.create",
+                    response: {
+                        instructions: `You are listening to a meeting, another listener has asked this question, they are not the one speaking, give them a short direct helpful answer: ${text}`
+                    }
+                }));
+                // Append the user's message to the chatbox
+                appendMessage(text, 'user');
+                input.value = '';
+            }
+        }
+
+        document.getElementById('send-button').onclick = sendMessage;
+        document.getElementById('message-input').onkeypress = function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        };
+    </script>
+</body>
+</html>
