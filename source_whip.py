@@ -6,6 +6,7 @@ import uuid
 import av
 import base64
 import sys
+import io  # Add this import at the top with other imports
 
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
@@ -15,6 +16,7 @@ from aiortc.mediastreams import MediaStreamError
 SERVER_PORT = 8080
 WHIP_ENDPOINT = "/whip"
 SCREEN_MAX = 1024
+SCREEN_RATE = 30
 
 # Add global connection tracking
 pcs = set()
@@ -78,13 +80,20 @@ class WHIPHandler:
             try:
                 frame = await track.recv()
                 counter += 1
-                if counter % 30 == 0:
+                if counter % SCREEN_RATE == 0:
                     log(f"Received {counter} video frames")
                     img = frame.to_image()
-                    # resize image if necessary, preserve aspect ratio
                     if img.width > SCREEN_MAX or img.height > SCREEN_MAX:
-                        img.thumbnail((SCREEN_MAX, SCREEN_MAX), resample=3)
-                    img.save(f'snapshot.png')
+                        img.thumbnail((SCREEN_MAX, SCREEN_MAX), resample=3)                    
+                    img_byte_arr = io.BytesIO()
+                    img.save(img_byte_arr, format='PNG')
+                    img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+                    message = {
+                        "type": "stream.image.snapshot",
+                        "mime": "image/png",
+                        "data": img_base64
+                    }
+                    print(json.dumps(message), flush=True)
                     
             except MediaStreamError:
                 log(f"Video stream ended for handler {self.id}")
