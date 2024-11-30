@@ -1,9 +1,17 @@
+# Audio processing
 pyaudio
 av
+
+# Networking and WebSocket
 aiohttp
 aiortc
-python-dotenv
+websocket-client
+
+# Data processing and imaging
 numpy
 opencv-python
 pillow
-websocket-client
+imagehash
+
+# Configuration
+python-dotenv
