@@ -6,3 +6,4 @@ python-dotenv
 numpy
 opencv-python
 pillow
+websocket-client
