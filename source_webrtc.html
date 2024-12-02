@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC Source</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #controls {
+            margin-bottom: 10px;
+        }
+        #status {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="connectButton">Connect</button>
+        <label>
+            <input type="checkbox" id="videoCheckbox"> Enable Video
+        </label>
+    </div>
+    <div id="status">Status: Disconnected</div>
+
+    <script>
+        let pc = null;
+
+        document.getElementById('connectButton').onclick = async () => {
+            if (pc) {
+                pc.close();
+                pc = null;
+                document.getElementById('status').textContent = 'Status: Disconnected';
+                document.getElementById('connectButton').textContent = 'Connect';
+                return;
+            }
+
+            const enableVideo = document.getElementById('videoCheckbox').checked;
+            pc = new RTCPeerConnection();
+
+            pc.onicecandidate = event => {
+                // Nothing needed here since we're not using trickle ICE
+            };
+
+            const constraints = {
+                audio: true,
+                video: enableVideo
+            };
+
+            let stream = await navigator.mediaDevices.getUserMedia(constraints);
+            stream.getTracks().forEach(track => {
+                pc.addTrack(track, stream);
+            });
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            // Wait for ICE gathering to complete
+            await new Promise(resolve => {
+                if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                } else {
+                    function checkState() {
+                        if (pc.iceGatheringState === 'complete') {
+                            pc.removeEventListener('icegatheringstatechange', checkState);
+                            resolve();
+                        }
+                    }
+                    pc.addEventListener('icegatheringstatechange', checkState);
+                }
+            });
+
+            const response = await fetch('/offer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sdp: pc.localDescription.sdp,
+                    type: pc.localDescription.type
+                })
+            });
+
+            const answer = await response.json();
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'connected') {
+                    document.getElementById('status').textContent = 'Status: Connected';
+                    document.getElementById('connectButton').textContent = 'Disconnect';
+                } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                    document.getElementById('status').textContent = 'Status: Disconnected';
+                    document.getElementById('connectButton').textContent = 'Connect';
+                }
+            };
+        };
+
+        const handleVideoCheckbox = () => {
+            const enableVideo = document.getElementById('videoCheckbox').checked;
+            // Additional logic if needed
+        };
+
+        document.getElementById('videoCheckbox').addEventListener('change', handleVideoCheckbox);
+    </script>
+</body>
+</html>
