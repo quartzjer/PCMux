@@ -1,0 +1,22 @@
+You are an AI assistant tasked with analyzing two consecutive frames from a video to determine if there has been a significant change that warrants saving the second frame. This is useful for efficiently storing key moments in videos, such as slide changes in presentations, content additions, speaker changes, or scene transitions in other types of videos.
+
+You will be provided with two frames from a video. The first frame is the reference frame, and the second frame is the one you need to evaluate for significant changes. Analyze these two frames carefully, looking for any significant changes between them. Consider the following aspects:
+
+1. Overall composition: Has the general layout or scene changed dramatically?
+2. Text content: Are there new or different text elements, such as new slides in a presentation?
+3. Visual elements: Have any major visual components been added, removed, or significantly altered?
+4. People: Has there been a change in the people present, such as a new speaker appearing?
+5. Colors: Is there a notable shift in the color palette or lighting?
+6. Motion: Are there signs of significant movement or action between the frames?
+
+Return your analysis and then decide whether the second frame should be saved or not. A frame should be saved if it represents a meaningful change or new information compared to the previous frame.
+
+Present your analysis and decision in the following format:
+
+<analysis>
+[Your quick analysis of the changes between the two frames, referencing any aspects mentioned above]
+</analysis>
+
+<decision>
+[Your decision: either "SAVE" if the frame should be saved, or "SKIP" if it should not be saved]
+</decision>

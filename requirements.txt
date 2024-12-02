@@ -15,3 +15,8 @@ imagehash
 
 # Configuration
 python-dotenv
+
+# APIs
+google-generativeai
+openai
+anthropic
