@@ -5,200 +5,227 @@
     <title>WebRTC Source</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        #container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #header {
+            text-align: center;
+            margin-bottom: 30px;
         }
         #controls {
-            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        #controls > * {
+            flex-basis: calc(50% - 15px);
+            min-width: 150px;
+        }
+        button, select, label {
+            width: 100%;
+            font-size: 16px;
         }
         #status {
-            color: green;
+            text-align: center;
+            font-weight: bold;
+            margin-top: 10px;
         }
         .preview-container {
+            display: flex;
+            justify-content: center;
             margin-top: 20px;
-            max-width: 800px;
         }
         video {
             width: 100%;
-            max-width: 400px;
-            margin: 10px 0;
-        }
-        .source-selector {
-            margin: 10px 0;
+            max-width: 600px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #000;
         }
     </style>
 </head>
 <body>
-    <div id="controls">
-        <button id="connectButton">Connect</button>
-        <label>
-            <input type="checkbox" id="videoCheckbox"> Enable Video
-        </label>
-        <div class="source-selector">
+    <div id="container">
+        <div id="header">
+            <h1>WebRTC Source</h1>
+        </div>
+        <div id="controls">
+            <button id="connectButton">Connect</button>
+            <label for="videoCheckbox">
+                <input type="checkbox" id="videoCheckbox"> Enable Video
+            </label>
             <button id="screenShareButton" disabled>Share Screen</button>
             <select id="videoSource" disabled>
                 <option value="camera">Camera</option>
                 <option value="screen">Screen</option>
             </select>
         </div>
-    </div>
-    <div id="status">Status: Disconnected</div>
-    <div class="preview-container">
-        <video id="localPreview" autoplay playsinline muted></video>
-    </div>
+        <div id="status">Status: Disconnected</div>
+        <div class="preview-container">
+            <video id="localPreview" autoplay playsinline muted></video>
+        </div>
 
-    <script>
-        let pc = null;
-        let currentStream = null;
+        <script>
+            let pc = null;
+            let currentStream = null;
 
-        async function startCamera() {
-            const constraints = {
-                audio: true,
-                video: true
-            };
-            return await navigator.mediaDevices.getUserMedia(constraints);
-        }
-
-        async function startScreenShare() {
-            return await navigator.mediaDevices.getDisplayMedia({
-                video: true,
-                audio: true
-            });
-        }
-
-        async function switchStream(streamType) {
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
+            async function startCamera() {
+                const constraints = {
+                    audio: true,
+                    video: true
+                };
+                return await navigator.mediaDevices.getUserMedia(constraints);
             }
 
-            try {
-                currentStream = streamType === 'screen' ? 
-                    await startScreenShare() : 
-                    await startCamera();
-                
-                document.getElementById('localPreview').srcObject = currentStream;
-
-                if (pc && pc.connectionState === 'connected') {
-                    const senders = pc.getSenders();
-                    const tracks = currentStream.getTracks();
-                    
-                    for (const track of tracks) {
-                        const sender = senders.find(s => s.track?.kind === track.kind);
-                        if (sender) {
-                            await sender.replaceTrack(track);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('Error switching stream:', e);
-                document.getElementById('videoSource').value = 'camera';
+            async function startScreenShare() {
+                return await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: true
+                });
             }
-        }
 
-        document.getElementById('connectButton').onclick = async () => {
-            if (pc) {
-                pc.close();
-                pc = null;
-                document.getElementById('status').textContent = 'Status: Disconnected';
-                document.getElementById('connectButton').textContent = 'Connect';
+            async function switchStream(streamType) {
                 if (currentStream) {
                     currentStream.getTracks().forEach(track => track.stop());
-                    currentStream = null;
                 }
-                document.getElementById('localPreview').srcObject = null;
-                document.getElementById('videoSource').disabled = true;
-                document.getElementById('screenShareButton').disabled = true;
-                return;
-            }
 
-            const enableVideo = document.getElementById('videoCheckbox').checked;
-            pc = new RTCPeerConnection();
-
-            if (enableVideo) {
                 try {
-                    currentStream = await startCamera();
+                    currentStream = streamType === 'screen' ? 
+                        await startScreenShare() : 
+                        await startCamera();
+                    
                     document.getElementById('localPreview').srcObject = currentStream;
-                    document.getElementById('videoSource').disabled = false;
-                    document.getElementById('screenShareButton').disabled = false;
-                } catch (e) {
-                    console.error('Error accessing media devices:', e);
-                    return;
-                }
-            } else {
-                currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            }
 
-            currentStream.getTracks().forEach(track => {
-                pc.addTrack(track, currentStream);
-            });
-
-            pc.onicecandidate = event => {
-                // Nothing needed here since we're not using trickle ICE
-            };
-
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            // Wait for ICE gathering to complete
-            await new Promise(resolve => {
-                if (pc.iceGatheringState === 'complete') {
-                    resolve();
-                } else {
-                    function checkState() {
-                        if (pc.iceGatheringState === 'complete') {
-                            pc.removeEventListener('icegatheringstatechange', checkState);
-                            resolve();
+                    if (pc && pc.connectionState === 'connected') {
+                        const senders = pc.getSenders();
+                        const tracks = currentStream.getTracks();
+                        
+                        for (const track of tracks) {
+                            const sender = senders.find(s => s.track?.kind === track.kind);
+                            if (sender) {
+                                await sender.replaceTrack(track);
+                            }
                         }
                     }
-                    pc.addEventListener('icegatheringstatechange', checkState);
+                } catch (e) {
+                    console.error('Error switching stream:', e);
+                    document.getElementById('videoSource').value = 'camera';
                 }
-            });
+            }
 
-            const response = await fetch('/offer', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    sdp: pc.localDescription.sdp,
-                    type: pc.localDescription.type
-                })
-            });
-
-            const answer = await response.json();
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-
-            pc.onconnectionstatechange = () => {
-                if (pc.connectionState === 'connected') {
-                    document.getElementById('status').textContent = 'Status: Connected';
-                    document.getElementById('connectButton').textContent = 'Disconnect';
-                } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+            document.getElementById('connectButton').onclick = async () => {
+                if (pc) {
+                    pc.close();
+                    pc = null;
                     document.getElementById('status').textContent = 'Status: Disconnected';
                     document.getElementById('connectButton').textContent = 'Connect';
+                    if (currentStream) {
+                        currentStream.getTracks().forEach(track => track.stop());
+                        currentStream = null;
+                    }
+                    document.getElementById('localPreview').srcObject = null;
+                    document.getElementById('videoSource').disabled = true;
+                    document.getElementById('screenShareButton').disabled = true;
+                    return;
+                }
+
+                const enableVideo = document.getElementById('videoCheckbox').checked;
+                pc = new RTCPeerConnection();
+
+                if (enableVideo) {
+                    try {
+                        currentStream = await startCamera();
+                        document.getElementById('localPreview').srcObject = currentStream;
+                        document.getElementById('videoSource').disabled = false;
+                        document.getElementById('screenShareButton').disabled = false;
+                    } catch (e) {
+                        console.error('Error accessing media devices:', e);
+                        return;
+                    }
+                } else {
+                    currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                }
+
+                currentStream.getTracks().forEach(track => {
+                    pc.addTrack(track, currentStream);
+                });
+
+                pc.onicecandidate = event => {
+                    // Nothing needed here since we're not using trickle ICE
+                };
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering to complete
+                await new Promise(resolve => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        function checkState() {
+                            if (pc.iceGatheringState === 'complete') {
+                                pc.removeEventListener('icegatheringstatechange', checkState);
+                                resolve();
+                            }
+                        }
+                        pc.addEventListener('icegatheringstatechange', checkState);
+                    }
+                });
+
+                const response = await fetch('/offer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sdp: pc.localDescription.sdp,
+                        type: pc.localDescription.type
+                    })
+                });
+
+                const answer = await response.json();
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+                pc.onconnectionstatechange = () => {
+                    if (pc.connectionState === 'connected') {
+                        document.getElementById('status').textContent = 'Status: Connected';
+                        document.getElementById('connectButton').textContent = 'Disconnect';
+                    } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                        document.getElementById('status').textContent = 'Status: Disconnected';
+                        document.getElementById('connectButton').textContent = 'Connect';
+                    }
+                };
+            };
+
+            const handleVideoCheckbox = () => {
+                const enableVideo = document.getElementById('videoCheckbox').checked;
+                document.getElementById('videoSource').disabled = !enableVideo;
+                document.getElementById('screenShareButton').disabled = !enableVideo;
+                if (!enableVideo && currentStream) {
+                    currentStream.getVideoTracks().forEach(track => track.stop());
+                    document.getElementById('localPreview').srcObject = null;
                 }
             };
-        };
 
-        const handleVideoCheckbox = () => {
-            const enableVideo = document.getElementById('videoCheckbox').checked;
-            document.getElementById('videoSource').disabled = !enableVideo;
-            document.getElementById('screenShareButton').disabled = !enableVideo;
-            if (!enableVideo && currentStream) {
-                currentStream.getVideoTracks().forEach(track => track.stop());
-                document.getElementById('localPreview').srcObject = null;
-            }
-        };
+            document.getElementById('videoSource').addEventListener('change', (e) => {
+                switchStream(e.target.value);
+            });
 
-        document.getElementById('videoSource').addEventListener('change', (e) => {
-            switchStream(e.target.value);
-        });
+            document.getElementById('screenShareButton').addEventListener('click', async () => {
+                document.getElementById('videoSource').value = 'screen';
+                await switchStream('screen');
+            });
 
-        document.getElementById('screenShareButton').addEventListener('click', async () => {
-            document.getElementById('videoSource').value = 'screen';
-            await switchStream('screen');
-        });
-
-        document.getElementById('videoCheckbox').addEventListener('change', handleVideoCheckbox);
-    </script>
+            document.getElementById('videoCheckbox').addEventListener('change', handleVideoCheckbox);
+        </script>
+    </div>
 </body>
 </html>
