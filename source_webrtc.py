@@ -4,11 +4,11 @@ import sys
 import base64
 import av
 import logging
+import io
 
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 
-# Configure logging to write to stderr
 logging.basicConfig(
     level=logging.INFO,
     stream=sys.stderr,
@@ -17,6 +17,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 pcs = set()
+
+SCREEN_MAX = 1024
+SCREEN_RATE = 30
 
 async def index(request):
     return web.FileResponse('./source_webrtc.html')
@@ -54,25 +57,31 @@ async def offer(request):
                         "type": "pcmux.audio.delta",
                         "delta": audio_base64
                     }
-                    # PCMux output goes to stdout
                     print(json.dumps(message), flush=True, file=sys.stdout)
             except Exception as e:
                 logger.error(f"Error processing audio track: {e}")
                 break
 
     async def handle_video_track(track):
-        resampler = av.video.resampler.VideoResampler(format='rgb24')
+        counter = 0
         while True:
             try:
                 frame = await track.recv()
-                resampled_frame = resampler.resample(frame)
-                video_data = resampled_frame.to_ndarray().tobytes()
-                video_base64 = base64.b64encode(video_data).decode('utf-8')
-                message = {
-                    "type": "pcmux.video.delta",
-                    "delta": video_base64
-                }
-                print(json.dumps(message), flush=True, file=sys.stdout)
+                counter += 1
+                if counter % SCREEN_RATE == 0:
+                    logger.info(f"Received {counter} video frames")
+                    img = frame.to_image()
+                    if img.width > SCREEN_MAX or img.height > SCREEN_MAX:
+                        img.thumbnail((SCREEN_MAX, SCREEN_MAX), resample=3)
+                    img_byte_arr = io.BytesIO()
+                    img.save(img_byte_arr, format='PNG')
+                    img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+                    message = {
+                        "type": "stream.image.snapshot",
+                        "mime": "image/png",
+                        "data": img_base64
+                    }
+                    print(json.dumps(message), flush=True)
             except Exception as e:
                 logger.error(f"Error processing video track: {e}")
                 break
@@ -83,12 +92,10 @@ async def offer(request):
             await pc.close()
             pcs.discard(pc)
 
-    # Handle the offer
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
-    # Send back the answer
     response = {
         'sdp': pc.localDescription.sdp,
         'type': pc.localDescription.type

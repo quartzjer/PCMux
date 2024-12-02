@@ -14,6 +14,18 @@
         #status {
             color: green;
         }
+        .preview-container {
+            margin-top: 20px;
+            max-width: 800px;
+        }
+        video {
+            width: 100%;
+            max-width: 400px;
+            margin: 10px 0;
+        }
+        .source-selector {
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
@@ -22,11 +34,66 @@
         <label>
             <input type="checkbox" id="videoCheckbox"> Enable Video
         </label>
+        <div class="source-selector">
+            <button id="screenShareButton" disabled>Share Screen</button>
+            <select id="videoSource" disabled>
+                <option value="camera">Camera</option>
+                <option value="screen">Screen</option>
+            </select>
+        </div>
     </div>
     <div id="status">Status: Disconnected</div>
+    <div class="preview-container">
+        <video id="localPreview" autoplay playsinline muted></video>
+    </div>
 
     <script>
         let pc = null;
+        let currentStream = null;
+
+        async function startCamera() {
+            const constraints = {
+                audio: true,
+                video: true
+            };
+            return await navigator.mediaDevices.getUserMedia(constraints);
+        }
+
+        async function startScreenShare() {
+            return await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: true
+            });
+        }
+
+        async function switchStream(streamType) {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            try {
+                currentStream = streamType === 'screen' ? 
+                    await startScreenShare() : 
+                    await startCamera();
+                
+                document.getElementById('localPreview').srcObject = currentStream;
+
+                if (pc && pc.connectionState === 'connected') {
+                    const senders = pc.getSenders();
+                    const tracks = currentStream.getTracks();
+                    
+                    for (const track of tracks) {
+                        const sender = senders.find(s => s.track?.kind === track.kind);
+                        if (sender) {
+                            await sender.replaceTrack(track);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Error switching stream:', e);
+                document.getElementById('videoSource').value = 'camera';
+            }
+        }
 
         document.getElementById('connectButton').onclick = async () => {
             if (pc) {
@@ -34,25 +101,40 @@
                 pc = null;
                 document.getElementById('status').textContent = 'Status: Disconnected';
                 document.getElementById('connectButton').textContent = 'Connect';
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                    currentStream = null;
+                }
+                document.getElementById('localPreview').srcObject = null;
+                document.getElementById('videoSource').disabled = true;
+                document.getElementById('screenShareButton').disabled = true;
                 return;
             }
 
             const enableVideo = document.getElementById('videoCheckbox').checked;
             pc = new RTCPeerConnection();
 
+            if (enableVideo) {
+                try {
+                    currentStream = await startCamera();
+                    document.getElementById('localPreview').srcObject = currentStream;
+                    document.getElementById('videoSource').disabled = false;
+                    document.getElementById('screenShareButton').disabled = false;
+                } catch (e) {
+                    console.error('Error accessing media devices:', e);
+                    return;
+                }
+            } else {
+                currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
+
+            currentStream.getTracks().forEach(track => {
+                pc.addTrack(track, currentStream);
+            });
+
             pc.onicecandidate = event => {
                 // Nothing needed here since we're not using trickle ICE
             };
-
-            const constraints = {
-                audio: true,
-                video: enableVideo
-            };
-
-            let stream = await navigator.mediaDevices.getUserMedia(constraints);
-            stream.getTracks().forEach(track => {
-                pc.addTrack(track, stream);
-            });
 
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
@@ -99,8 +181,22 @@
 
         const handleVideoCheckbox = () => {
             const enableVideo = document.getElementById('videoCheckbox').checked;
-            // Additional logic if needed
+            document.getElementById('videoSource').disabled = !enableVideo;
+            document.getElementById('screenShareButton').disabled = !enableVideo;
+            if (!enableVideo && currentStream) {
+                currentStream.getVideoTracks().forEach(track => track.stop());
+                document.getElementById('localPreview').srcObject = null;
+            }
         };
+
+        document.getElementById('videoSource').addEventListener('change', (e) => {
+            switchStream(e.target.value);
+        });
+
+        document.getElementById('screenShareButton').addEventListener('click', async () => {
+            document.getElementById('videoSource').value = 'screen';
+            await switchStream('screen');
+        });
 
         document.getElementById('videoCheckbox').addEventListener('change', handleVideoCheckbox);
     </script>
