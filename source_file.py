@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def main():
     parser = argparse.ArgumentParser(description='Stream media file to PCMux protocol')
     parser.add_argument('media_file', help='Path to media file to stream')
-    parser.add_argument('--playback-rate', type=float, default=1.0,
+    parser.add_argument('-r', '--playback-rate', type=float, default=1.0,
                        help='Playback rate multiplier (default: 1.0)')
     args = parser.parse_args()
 
@@ -60,10 +60,15 @@ def main():
         sys.exit(1)
 
     try:
+        start_time = time.time()
+        media_start_pts = None
+
         for packet in container.demux():
+            if media_start_pts is None and packet.pts is not None:
+                media_start_pts = packet.pts * packet.time_base
+
             if packet.stream == audio_stream:
                 for frame in packet.decode():
-                    # Handle audio frame
                     resampled_frames = audio_resampler.resample(frame)
                     for resampled_frame in resampled_frames:
                         audio_data = resampled_frame.to_ndarray().tobytes()
@@ -74,12 +79,9 @@ def main():
                         }
                         print(json.dumps(message))
                         sys.stdout.flush()
-                        if args.playback_rate != 1.0:
-                            frame_duration = resampled_frame.samples / sample_rate
-                            time.sleep(frame_duration / args.playback_rate)
+
             elif packet.stream == video_stream:
                 for frame in packet.decode():
-                    # Handle video frame
                     frame_counter += 1
                     if frame_counter % FRAME_INTERVAL == 0:
                         logger.debug(f"Processing video frame {frame_counter}")
@@ -96,9 +98,15 @@ def main():
                         }
                         print(json.dumps(message))
                         sys.stdout.flush()
-                    if args.playback_rate != 1.0:
-                        frame_duration = 1 / float(video_stream.average_rate)
-                        time.sleep(frame_duration / args.playback_rate)
+
+            # Unified timing control
+            if packet.pts is not None:
+                media_time = (packet.pts * packet.time_base) - media_start_pts
+                wall_time = time.time() - start_time
+                sleep_duration = (media_time / args.playback_rate) - wall_time
+                if sleep_duration > 0:
+                    time.sleep(sleep_duration)
+
     except KeyboardInterrupt:
         logger.info("Streaming interrupted by user")
     except Exception as e:
