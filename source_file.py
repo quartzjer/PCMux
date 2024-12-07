@@ -90,7 +90,7 @@ def main():
                         img.save(img_byte_arr, format='PNG')
                         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
                         message = {
-                            "type": "stream.image.snapshot",
+                            "type": "pcmux.video.frame",
                             "mime": "image/png",
                             "data": img_base64
                         }

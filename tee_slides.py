@@ -88,7 +88,7 @@ def main():
             print(line, end='', flush=True)
             
             message = json.loads(line)
-            if message.get("type") != "stream.image.snapshot":
+            if message.get("type") != "pcmux.video.frame":
                 continue
             
             image_data = base64.b64decode(message.get("data"))
