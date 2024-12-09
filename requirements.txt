@@ -1,6 +1,9 @@
 # Audio processing
 pyaudio
 av
+faster-whisper
+pyannote.audio
+wave
 
 # Networking and WebSocket
 aiohttp
