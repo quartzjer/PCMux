@@ -89,6 +89,23 @@ All messages are JSON objects terminated by a newline character. Each message co
 }
 ```
 
+#### `pcmux.text.chunk` Event
+
+- **Type**: `"pcmux.text.chunk"`
+- **Fields**:
+  - **`speaker`**: String uniquely identifying the speaker of this text segment
+  - **`text`**: Text from the speaker, typically transcribed from the audio
+
+**Message Structure:**
+
+```json
+{
+  "type": "pcmux.text.chunk",
+  "speaker": "SPEAKER_01",
+  "text": "Spoken or written text"
+}
+```
+
 ## Media Buffer Handling
 
 ### Receiving and Playing Audio Data
@@ -114,7 +131,7 @@ def on_message(ws, message):
             stream.write(audio_data)
 ```
 
-### Receiving and Displaying Video Frame Snapshots
+### Receiving and Processing Video Frame Snapshots
 
 The client listens for messages of type `"pcmux.video.frame"`, extracts the base64-encoded image data from the `"data"` field, decodes it back to image bytes, and handles the image processing.
 
